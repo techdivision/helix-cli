@@ -1,4 +1,6 @@
 /* eslint-disable header/header */
+// noinspection JSUnresolvedReference
+
 /**
  * Copyright (c) 2024 TechDivision GmbH
  * All rights reserved
@@ -16,6 +18,13 @@ import { GitUrl } from '@adobe/helix-shared-git';
 
 export default class MultisiteUtils {
   /**
+   * Active site cache
+   *
+   * @type {String|null}
+   */
+  static activeSite = null;
+
+  /**
    * Get multisite folder
    *
    * @returns {string}
@@ -31,11 +40,15 @@ export default class MultisiteUtils {
    * @returns {Promise<string|null>}
    */
   static async getActiveSite(dir) {
+    if (this.activeSite) {
+      return this.activeSite;
+    }
     const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
     if (!(await fs.pathExists(activeSiteFilePath))) {
       return null;
     }
-    return (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim();
+    this.activeSite = (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim();
+    return this.activeSite;
   }
 
   /**
@@ -94,6 +107,7 @@ export default class MultisiteUtils {
     // set active site
     const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
     await fs.writeFile(activeSiteFilePath, site, 'utf-8');
+    this.activeSite = site;
     return true;
   }
 
