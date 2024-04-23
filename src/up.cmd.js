@@ -15,6 +15,7 @@ import chalk from 'chalk-template';
 import chokidar from 'chokidar';
 import { HelixProject } from './server/HelixProject.js';
 import GitUtils from './git-utils.js';
+import MultisiteUtils from './multisite-utils.js';
 import pkgJson from './package.cjs';
 import { getFetch } from './fetch-utils.js';
 import { AbstractServerCommand } from './abstract-server.cmd.js';
@@ -42,6 +43,28 @@ export default class UpCommand extends AbstractServerCommand {
       delete this._watcher;
       await watcher.close();
     }
+  }
+
+  async run() {
+    // multisite: port given, activate project based on port
+    if (this._httpPort !== 3000) {
+      const siteByPort = await MultisiteUtils.getSiteByPort(this.directory, this._httpPort);
+      if (siteByPort) {
+        this.log.info(chalk`{cyan Multisite: Site ${siteByPort} activated because port ${this._httpPort} was given}`);
+        this.log.info('');
+        await MultisiteUtils.activate(this.directory, siteByPort);
+      }
+    } else {
+      // multisite: port not given, set port to match activated site
+      const port = await MultisiteUtils.getActiveSitePort(this.directory);
+      if (port) {
+        const site = await MultisiteUtils.getActiveSite(this.directory);
+        this.withHttpPort(port);
+        this.log.info(chalk`{cyan Multisite: Site ${site} is active, so port ${this._httpPort} is being used}`);
+        this.log.info('');
+      }
+    }
+    await super.run();
   }
 
   async init() {
@@ -75,6 +98,7 @@ export default class UpCommand extends AbstractServerCommand {
 
     const ref = await GitUtils.getBranch(this.directory);
     this._gitUrl = await GitUtils.getOriginURL(this.directory, { ref });
+    this._gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory, this._gitUrl);
     if (!this._url) {
       await this.verifyUrl(this._gitUrl, ref);
     }
