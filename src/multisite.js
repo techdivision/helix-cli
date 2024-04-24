@@ -30,6 +30,7 @@ export default function multisite() {
 
   return {
     command: 'multisite <command> [args...]',
+    description: 'Multisite commands',
     aliases: [],
     builder: (yargs) => {
       yargs
@@ -37,10 +38,12 @@ export default function multisite() {
           command: 'activate <site>',
           describe: 'Activate a site',
           builder: (yargsSub) => {
-            yargsSub.positional('site', {
-              describe: 'The site to activate',
-              type: 'string',
-            });
+            yargsSub
+              .positional('site', {
+                describe: 'The site to activate',
+                type: 'string',
+              })
+              .help();
           },
           handler: handleActivate,
         })
@@ -48,7 +51,8 @@ export default function multisite() {
           command: 'deactivate',
           describe: 'Deactivate multisite',
           handler: handleActivate,
-        });
+        })
+        .help();
     },
   };
 }

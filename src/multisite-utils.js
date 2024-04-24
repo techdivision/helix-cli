@@ -15,6 +15,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import yaml from 'yaml';
 import { GitUrl } from '@adobe/helix-shared-git';
+import GitUtils from './git-utils.js';
 
 export default class MultisiteUtils {
   /**
@@ -143,13 +144,15 @@ export default class MultisiteUtils {
   }
 
   /**
-   * Replace git URL with active site's git URL
+   * Get git URL for active site
    *
    * @param {String} dir Directory
-   * @param {GitUrl} gitUrl Git Url
    * @returns {Promise<GitUrl|*>}
    */
-  static async getActiveSiteGitUrl(dir, gitUrl) {
+  static async getActiveSiteGitUrl(dir) {
+    const ref = await GitUtils.getBranch(dir);
+    // noinspection JSCheckFunctionSignatures
+    const gitUrl = await GitUtils.getOriginURL(dir, { ref });
     const siteConfig = await MultisiteUtils.getActiveSiteConfig(dir);
     if (!siteConfig) {
       return gitUrl;

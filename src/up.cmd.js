@@ -97,8 +97,7 @@ export default class UpCommand extends AbstractServerCommand {
     this.log.info('');
 
     const ref = await GitUtils.getBranch(this.directory);
-    this._gitUrl = await GitUtils.getOriginURL(this.directory, { ref });
-    this._gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory, this._gitUrl);
+    this._gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory);
     if (!this._url) {
       await this.verifyUrl(this._gitUrl, ref);
     }
@@ -185,7 +184,7 @@ export default class UpCommand extends AbstractServerCommand {
           try {
             // restart if any of the files is not ignored
             const ref = await GitUtils.getBranch(this.directory);
-            const gitUrl = await GitUtils.getOriginURL(this.directory, { ref });
+            const gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory);
             if (gitUrl.toString() !== this._gitUrl.toString()) {
               this.log.info('git HEAD or remotes changed, reconfiguring server...');
               this._gitUrl = gitUrl;

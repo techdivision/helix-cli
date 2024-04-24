@@ -18,6 +18,7 @@ export default function hack() {
       executor = value;
     },
     command: 'hack [hackathon]',
+    description: 'Open hackathon',
     aliases: [],
     builder: (yargs) => {
       yargs
