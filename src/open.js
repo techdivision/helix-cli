@@ -38,9 +38,9 @@ export default function open() {
     handler: async (argv) => {
       if (!executor) {
         // eslint-disable-next-line global-require
-        const hackCommand = (await import('./open.cmd.js')).default; // lazy load the handler to speed up execution time
+        const openCommand = (await import('./open.cmd.js')).default; // lazy load the handler to speed up execution time
         // eslint-disable-next-line new-cap
-        executor = new hackCommand(getOrCreateLogger(argv));
+        executor = new openCommand(getOrCreateLogger(argv));
         executor.withEnvironment(argv.environment);
         executor.withOpen(argv.open);
       }
