@@ -54,16 +54,16 @@ export default class OpenCommand extends AbstractCommand {
     const hostTld = this._environment === 'live' ? 'live' : 'page';
 
     const dnsName = `${ref.replace(/\//g, '-')}--${gitUrl.repo}--${gitUrl.owner}`;
+    const url = `https://${dnsName}.${hostBase}.${hostTld}`;
     // check length limit
     if (dnsName.length > 63) {
-      this.log.error(chalk`URL {yellow https://${dnsName}.${hostBase}} exceeds the 63 character limit for DNS labels.`);
+      this.log.error(chalk`URL {yellow ${url}} exceeds the 63 character limit for DNS labels.`);
       this.log.error(chalk`Please use a shorter branch name or a shorter repository name.`);
-      await this.stop();
       throw Error('branch name too long');
     }
 
     // return URL
-    return `https://${dnsName}.${hostBase}.${hostTld}`;
+    return url;
   }
 
   async run() {
