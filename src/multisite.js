@@ -1,4 +1,6 @@
 /* eslint-disable header/header */
+// noinspection JSUnusedGlobalSymbols,JSUnresolvedReference
+
 /**
  * Copyright (c) 2024 TechDivision GmbH
  * All rights reserved
@@ -13,6 +15,19 @@ import MultisiteUtils from './multisite-utils.js';
 import { getOrCreateLogger } from './log-common.js';
 
 export default function multisite() {
+  const handleActivate = async (argv) => {
+    const logger = getOrCreateLogger(argv);
+
+    if (await MultisiteUtils.activate(process.cwd(), argv.site || null)) {
+      const activeSite = await MultisiteUtils.getActiveSite(process.cwd());
+      if (activeSite) {
+        logger.log(`Site ${activeSite} has been activated`);
+      } else {
+        logger.log('Multisite has been deactivated');
+      }
+    }
+  };
+
   return {
     command: 'multisite <command> [args...]',
     aliases: [],
@@ -27,13 +42,12 @@ export default function multisite() {
               type: 'string',
             });
           },
-          handler: async (argv) => {
-            const logger = getOrCreateLogger(argv);
-
-            if (await MultisiteUtils.activate(process.cwd(), argv.site)) {
-              logger.log('Site has been activated');
-            }
-          },
+          handler: handleActivate,
+        })
+        .command({
+          command: 'deactivate',
+          describe: 'Deactivate multisite',
+          handler: handleActivate,
         });
     },
   };

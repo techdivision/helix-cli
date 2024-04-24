@@ -22,7 +22,14 @@ export default class MultisiteUtils {
    *
    * @type {String|null}
    */
-  static activeSite = null;
+  static #activeSite = null;
+
+  /**
+   * Multi site config cache
+   *
+   * @type {*|null}
+   */
+  static #multiSiteConfig = null;
 
   /**
    * Get multisite folder
@@ -40,15 +47,15 @@ export default class MultisiteUtils {
    * @returns {Promise<string|null>}
    */
   static async getActiveSite(dir) {
-    if (this.activeSite) {
-      return this.activeSite;
+    if (this.#activeSite) {
+      return this.#activeSite;
     }
     const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
     if (!(await fs.pathExists(activeSiteFilePath))) {
       return null;
     }
-    this.activeSite = (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim();
-    return this.activeSite;
+    this.#activeSite = (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim() || null;
+    return this.#activeSite;
   }
 
   /**
@@ -58,12 +65,16 @@ export default class MultisiteUtils {
    * @returns {Promise<*|null>}
    */
   static async readMultisiteConfig(dir) {
+    if (this.#multiSiteConfig) {
+      return this.#multiSiteConfig;
+    }
     const configFilePath = path.join(dir, MultisiteUtils.multisiteFolder, 'config.yaml');
     if (!(await fs.pathExists(configFilePath))) {
       return null;
     }
     const configFileContent = (await fs.readFile(configFilePath, 'utf8'));
-    return yaml.parse(configFileContent);
+    this.#multiSiteConfig = yaml.parse(configFileContent);
+    return this.#multiSiteConfig;
   }
 
   /**
@@ -83,20 +94,41 @@ export default class MultisiteUtils {
     if (!config) {
       return null;
     }
-    return config.sites[activeSite];
+    return config.sites[activeSite] || null;
+  }
+
+  /**
+   * Deactivate child site
+   *
+   * @param {String} dir Directory
+   * @returns {Promise<boolean>}
+   */
+  static async deactivate(dir) {
+    return MultisiteUtils.activate(dir, null);
   }
 
   /**
    * Activate a child site
    *
    * @param {String} dir Directory
-   * @param {String} site Site code
+   * @param {String|null} site Site code
    * @returns {Promise<boolean>}
    */
   static async activate(dir, site) {
+    // read config
     const config = await MultisiteUtils.readMultisiteConfig(dir);
     if (!config) {
       throw new Error('Config could not be loaded');
+    }
+
+    // get .active file
+    const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
+
+    // check if default site was requested
+    if (!site || (['default', 'master', 'main', 'none'].includes(site) && !config.sites[site])) {
+      fs.remove(activeSiteFilePath);
+      this.#activeSite = null;
+      return true;
     }
 
     // check if site exists
@@ -105,9 +137,8 @@ export default class MultisiteUtils {
     }
 
     // set active site
-    const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
     await fs.writeFile(activeSiteFilePath, site, 'utf-8');
-    this.activeSite = site;
+    this.#activeSite = site;
     return true;
   }
 
