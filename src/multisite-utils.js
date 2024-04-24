@@ -48,15 +48,15 @@ export default class MultisiteUtils {
    * @returns {Promise<string|null>}
    */
   static async getActiveSite(dir) {
-    if (this.#activeSite) {
-      return this.#activeSite;
+    if (MultisiteUtils.#activeSite) {
+      return MultisiteUtils.#activeSite;
     }
     const activeSiteFilePath = path.join(dir, MultisiteUtils.multisiteFolder, '.active');
     if (!(await fs.pathExists(activeSiteFilePath))) {
       return null;
     }
-    this.#activeSite = (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim() || null;
-    return this.#activeSite;
+    MultisiteUtils.#activeSite = (await fs.readFile(activeSiteFilePath, 'utf8'))?.trim() || null;
+    return MultisiteUtils.#activeSite;
   }
 
   /**
@@ -66,16 +66,16 @@ export default class MultisiteUtils {
    * @returns {Promise<*|null>}
    */
   static async readMultisiteConfig(dir) {
-    if (this.#multiSiteConfig) {
-      return this.#multiSiteConfig;
+    if (MultisiteUtils.#multiSiteConfig) {
+      return MultisiteUtils.#multiSiteConfig;
     }
     const configFilePath = path.join(dir, MultisiteUtils.multisiteFolder, 'config.yaml');
     if (!(await fs.pathExists(configFilePath))) {
       return null;
     }
     const configFileContent = (await fs.readFile(configFilePath, 'utf8'));
-    this.#multiSiteConfig = yaml.parse(configFileContent);
-    return this.#multiSiteConfig;
+    MultisiteUtils.#multiSiteConfig = yaml.parse(configFileContent);
+    return MultisiteUtils.#multiSiteConfig;
   }
 
   /**
@@ -127,8 +127,8 @@ export default class MultisiteUtils {
 
     // check if default site was requested
     if (!site || (['default', 'master', 'main', 'none'].includes(site) && !config.sites[site])) {
-      fs.remove(activeSiteFilePath);
-      this.#activeSite = null;
+      await fs.remove(activeSiteFilePath);
+      MultisiteUtils.#activeSite = null;
       return true;
     }
 
@@ -139,7 +139,7 @@ export default class MultisiteUtils {
 
     // set active site
     await fs.writeFile(activeSiteFilePath, site, 'utf-8');
-    this.#activeSite = site;
+    MultisiteUtils.#activeSite = site;
     return true;
   }
 
@@ -169,7 +169,7 @@ export default class MultisiteUtils {
    * @returns {Promise<null|string>}
    */
   static async getSiteByPort(dir, port) {
-    const config = await this.readMultisiteConfig(dir);
+    const config = await MultisiteUtils.readMultisiteConfig(dir);
     if (!config) {
       return null;
     }
@@ -189,7 +189,7 @@ export default class MultisiteUtils {
    * @returns {Promise<null|int>}
    */
   static async getActiveSitePort(dir) {
-    return (await this.getActiveSiteConfig(dir))?.port;
+    return (await MultisiteUtils.getActiveSiteConfig(dir))?.port;
   }
 
   /**
@@ -200,7 +200,7 @@ export default class MultisiteUtils {
    * @returns {Promise<string>}
    */
   static async getMultiSiteFilePath(dir, filePath) {
-    const site = await this.getActiveSite(dir);
+    const site = await MultisiteUtils.getActiveSite(dir);
     if (!site) {
       return path.join(dir, filePath);
     }
