@@ -102,7 +102,7 @@ export class HelixImportServer extends BaseServer {
     delete headers.host;
     delete headers.referer;
 
-    const ret = await getFetch(true)(url, {
+    const ret = await getFetch(ctx.config.allowInsecure)(url, {
       method: req.method,
       headers,
       cache: 'no-store',
@@ -125,8 +125,8 @@ export class HelixImportServer extends BaseServer {
     respHeaders['access-control-allow-origin'] = '*';
     delete respHeaders['set-cookie'];
 
-    if (respHeaders.location && !respHeaders.location.startsWith('/')) {
-      const u = new URL(respHeaders.location);
+    if (respHeaders.location) {
+      const u = new URL(respHeaders.location, url);
       if (u.origin === host) {
         respHeaders.location = u.pathname;
       }

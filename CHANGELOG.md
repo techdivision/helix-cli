@@ -1,3 +1,52 @@
+## [16.3.16](https://github.com/adobe/helix-cli/compare/v16.3.15...v16.3.16) (2024-05-18)
+
+
+### Bug Fixes
+
+* **deps:** update dependency glob to v10.3.15 ([62b253a](https://github.com/adobe/helix-cli/commit/62b253af04bad9931b86914abb37de707c73dda8))
+
+## [16.3.15](https://github.com/adobe/helix-cli/compare/v16.3.14...v16.3.15) (2024-05-11)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([8c87341](https://github.com/adobe/helix-cli/commit/8c87341c485bc79ddce8a00ecfc16f85690a70e7))
+
+## [16.3.14](https://github.com/adobe/helix-cli/compare/v16.3.13...v16.3.14) (2024-05-09)
+
+
+### Bug Fixes
+
+* Resources that redirect to protocol-relative URIs are not handled correctly ([ca49c6b](https://github.com/adobe/helix-cli/commit/ca49c6bdf672e06a1b9d5f120f56ba8a01f6137f)), closes [#2354](https://github.com/adobe/helix-cli/issues/2354)
+
+## [16.3.13](https://github.com/adobe/helix-cli/compare/v16.3.12...v16.3.13) (2024-05-04)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([78e4620](https://github.com/adobe/helix-cli/commit/78e46206a58f69bc5ddc693bb2af7a91d2a3a6d9))
+
+## [16.3.12](https://github.com/adobe/helix-cli/compare/v16.3.11...v16.3.12) (2024-05-04)
+
+
+### Bug Fixes
+
+* **deps:** update dependency isomorphic-git to v1.25.8 ([39a8b2c](https://github.com/adobe/helix-cli/commit/39a8b2c5e6ecaea9a9edd53fc64242c0e0f558b3))
+
+## [16.3.11](https://github.com/adobe/helix-cli/compare/v16.3.10...v16.3.11) (2024-05-03)
+
+
+### Bug Fixes
+
+* support allow-unauthorized in aem up ([#2352](https://github.com/adobe/helix-cli/issues/2352)) ([e5cdac0](https://github.com/adobe/helix-cli/commit/e5cdac053e76df305925ec415e3b767176f0d8b1))
+
+## [16.3.10](https://github.com/adobe/helix-cli/compare/v16.3.9...v16.3.10) (2024-04-27)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.4.3 ([a69f5ff](https://github.com/adobe/helix-cli/commit/a69f5ffd8247c9a285aa28e35a819643ba30c6a7))
+
 ## [16.3.9](https://github.com/adobe/helix-cli/compare/v16.3.8...v16.3.9) (2024-04-17)
 
 
