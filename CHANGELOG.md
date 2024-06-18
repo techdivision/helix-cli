@@ -1,3 +1,101 @@
+## [16.5.2](https://github.com/adobe/helix-cli/compare/v16.5.1...v16.5.2) (2024-06-17)
+
+
+### Bug Fixes
+
+* update command name in message from 'hlx' to 'aem' ([#2384](https://github.com/adobe/helix-cli/issues/2384)) ([30d3ce0](https://github.com/adobe/helix-cli/commit/30d3ce06a810ec95bb3e5ae0bc216775b1160ed6))
+
+## [16.5.1](https://github.com/adobe/helix-cli/compare/v16.5.0...v16.5.1) (2024-06-15)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([8b988d4](https://github.com/adobe/helix-cli/commit/8b988d4371650b378186764254b00f5c67ae1ff5))
+
+# [16.5.0](https://github.com/adobe/helix-cli/compare/v16.4.0...v16.5.0) (2024-06-14)
+
+
+### Features
+
+* **security:** provide more troubleshooting instructions on `aem up` ([58d3403](https://github.com/adobe/helix-cli/commit/58d340337a2f443f21befede189657b71781abdd))
+
+# [16.4.0](https://github.com/adobe/helix-cli/compare/v16.3.26...v16.4.0) (2024-06-11)
+
+
+### Features
+
+* **import:** add support for local delivery of UE configuration files ([#2367](https://github.com/adobe/helix-cli/issues/2367)) ([975547d](https://github.com/adobe/helix-cli/commit/975547d62506df5db791818c65acd5198a8675ff))
+
+## [16.3.26](https://github.com/adobe/helix-cli/compare/v16.3.25...v16.3.26) (2024-06-09)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([f131bab](https://github.com/adobe/helix-cli/commit/f131bab5409914dad44ede5c88f5093260e22a53))
+
+## [16.3.25](https://github.com/adobe/helix-cli/compare/v16.3.24...v16.3.25) (2024-06-08)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.5.1 ([a087d6a](https://github.com/adobe/helix-cli/commit/a087d6a1a3cd7f0dbf771b842babc9d7d0b59d5c))
+
+## [16.3.24](https://github.com/adobe/helix-cli/compare/v16.3.23...v16.3.24) (2024-06-07)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/fetch to v4.1.8 ([6e0bf23](https://github.com/adobe/helix-cli/commit/6e0bf235aa94a7edb853d6c8fdb0e2899e68bb52))
+
+## [16.3.23](https://github.com/adobe/helix-cli/compare/v16.3.22...v16.3.23) (2024-06-06)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/fetch to v4.1.4 ([da6772f](https://github.com/adobe/helix-cli/commit/da6772f5d195521e118ff53d7010fe20e1a8b296))
+
+## [16.3.22](https://github.com/adobe/helix-cli/compare/v16.3.21...v16.3.22) (2024-06-06)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.5.0 ([be98290](https://github.com/adobe/helix-cli/commit/be98290eb64edf9f83d5ce8ecf7c31fe24f38f55))
+
+## [16.3.21](https://github.com/adobe/helix-cli/compare/v16.3.20...v16.3.21) (2024-06-04)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([#2374](https://github.com/adobe/helix-cli/issues/2374)) ([7974b5a](https://github.com/adobe/helix-cli/commit/7974b5aa39441f2ac0a8846e97dca94f6c65ac64))
+
+## [16.3.20](https://github.com/adobe/helix-cli/compare/v16.3.19...v16.3.20) (2024-06-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-indexer to v2.0.26 ([a1ecc03](https://github.com/adobe/helix-cli/commit/a1ecc038e116950dcdc0ad9a1aa92593c4da587a))
+
+## [16.3.19](https://github.com/adobe/helix-cli/compare/v16.3.18...v16.3.19) (2024-06-01)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([d5eb662](https://github.com/adobe/helix-cli/commit/d5eb6621406b823b3afe5c65e7dfe0b7e04c9b39))
+
+## [16.3.18](https://github.com/adobe/helix-cli/compare/v16.3.17...v16.3.18) (2024-05-30)
+
+
+### Bug Fixes
+
+* improve aem up error handling  ([f319855](https://github.com/adobe/helix-cli/commit/f319855d7e1ab0eea189f4fbb207dbb3510ece2f)), closes [#2369](https://github.com/adobe/helix-cli/issues/2369)
+
+## [16.3.17](https://github.com/adobe/helix-cli/compare/v16.3.16...v16.3.17) (2024-05-25)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-indexer to v2.0.25 ([2f68cf5](https://github.com/adobe/helix-cli/commit/2f68cf5015ad474755f905152418ef4ba01bdb7e))
+
 ## [16.3.16](https://github.com/adobe/helix-cli/compare/v16.3.15...v16.3.16) (2024-05-18)
 
 

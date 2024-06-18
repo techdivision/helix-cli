@@ -82,7 +82,7 @@ export default class UpCommand extends AbstractServerCommand {
       }
     } catch (e) {
       if (e.code === 'ENOENT') {
-        throw Error('hlx up needs local git repository.');
+        throw Error('aem up needs local git repository.');
       }
       throw e;
     }
@@ -104,6 +104,9 @@ export default class UpCommand extends AbstractServerCommand {
 
     const ref = await GitUtils.getBranch(this.directory);
     this._gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory);
+    if (!this._gitUrl) {
+      throw Error('No git remote found. Make sure you have a remote "origin" configured.');
+    }
     if (!this._url) {
       await this.verifyUrl(this._gitUrl, ref);
     }
@@ -139,17 +142,30 @@ export default class UpCommand extends AbstractServerCommand {
     //           "project": "Helix Website (AEM Live)",
     //             "testProperty": "header";
     // }
-    const configUrl = `https://admin.hlx.page/sidekick/${gitUrl.owner}/${gitUrl.repo}/main/config.json`;
-    const configResp = await getFetch(this._allowInsecure)(configUrl);
     let previewHostBase = 'hlx.page';
-    if (configResp.ok) {
+    const configUrl = `https://admin.hlx.page/sidekick/${gitUrl.owner}/${gitUrl.repo}/main/config.json`;
+    try {
+      const configResp = await getFetch(this._allowInsecure)(configUrl);
+      if (configResp.ok) {
       // this is best effort for now
-      const config = await configResp.json();
-      const { previewHost } = config;
-      if (previewHost && previewHost.endsWith('.aem.page')) {
-        previewHostBase = 'aem.page';
+        const config = await configResp.json();
+        const { previewHost } = config;
+        if (previewHost && previewHost.endsWith('.aem.page')) {
+          previewHostBase = 'aem.page';
+        }
+      }
+      /* c8 ignore start */
+      // this is notoriously hard to test, so we ignore it for now
+      // but if you want to give it a try, set up a local server with a self-signed cert
+      // change, /etc/hosts to point admin.hlx.page to localhost and run the test
+    } catch (e) {
+      if (e.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' || e.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+        await this.stop();
+        this.log.error(chalk`{yellow ${configUrl}} is using an invalid certificate, please check https://github.com/adobe/helix-cli#troubleshooting for help.`);
+        throw Error(e.message);
       }
     }
+    /* c8 ignore stop */
 
     const dnsName = `${ref.replace(/\//g, '-')}--${gitUrl.repo}--${gitUrl.owner}`;
     // check length limit
