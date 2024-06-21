@@ -59,7 +59,7 @@ export default class UpCommand extends AbstractServerCommand {
     // multisite: site given
     if (this._site) {
       await MultisiteUtils.activate(this.directory, this._site);
-      this._httpPort = MultisiteUtils.getActiveSitePort(this.directory);
+      this._httpPort = await MultisiteUtils.getActiveSitePort(this.directory);
     }
     // multisite: port given, activate project based on port
     if (this._httpPort !== 3000) {
