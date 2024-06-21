@@ -41,6 +41,11 @@ export default class UpCommand extends AbstractServerCommand {
     return this;
   }
 
+  withSite(value) {
+    this._site = value;
+    return this;
+  }
+
   async doStop() {
     await super.doStop();
     if (this._watcher) {
@@ -51,6 +56,11 @@ export default class UpCommand extends AbstractServerCommand {
   }
 
   async run() {
+    // multisite: site given
+    if (this._site) {
+      await MultisiteUtils.activate(this.directory, this._site);
+      this._httpPort = MultisiteUtils.getActiveSitePort(this.directory);
+    }
     // multisite: port given, activate project based on port
     if (this._httpPort !== 3000) {
       const siteByPort = await MultisiteUtils.getSiteByPort(this.directory, this._httpPort);

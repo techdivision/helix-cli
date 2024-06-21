@@ -51,6 +51,11 @@ export default function up() {
           type: 'int',
           default: 3000,
         })
+        .option('site', {
+          describe: 'Start development server for site',
+          type: 'string',
+          default: undefined,
+        })
         .option('addr', {
           describe: 'Bind development server on addr. use * to bind to any address and allow external connections.',
           type: 'string',
@@ -110,6 +115,7 @@ export default function up() {
 
       await executor
         .withHttpPort(argv.port)
+        .withSite(argv.site)
         .withBindAddr(argv.addr)
         // only open  browser window when executable is `aem`
         // this prevents the window to be opened during integration tests
