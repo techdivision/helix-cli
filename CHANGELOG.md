@@ -1,3 +1,94 @@
+## [16.5.15](https://github.com/adobe/helix-cli/compare/v16.5.14...v16.5.15) (2024-07-27)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([c6ceb8f](https://github.com/adobe/helix-cli/commit/c6ceb8fa1842395e58e9ff470d105b85e8cec8e8))
+
+## [16.5.14](https://github.com/adobe/helix-cli/compare/v16.5.13...v16.5.14) (2024-07-27)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-indexer to v2.1.2 ([3485216](https://github.com/adobe/helix-cli/commit/34852168091fe1cc57e7aefedefc3d59a4a02ed1))
+
+## [16.5.13](https://github.com/adobe/helix-cli/compare/v16.5.12...v16.5.13) (2024-07-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency glob to v11 ([#2395](https://github.com/adobe/helix-cli/issues/2395)) ([389eea5](https://github.com/adobe/helix-cli/commit/389eea53e3adad5933d4529c0dd994827aa0649d))
+
+## [16.5.12](https://github.com/adobe/helix-cli/compare/v16.5.11...v16.5.12) (2024-07-13)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([e2656a3](https://github.com/adobe/helix-cli/commit/e2656a3c8f17c22a6fd75ff4e5288007c7f3a9b7))
+
+## [16.5.11](https://github.com/adobe/helix-cli/compare/v16.5.10...v16.5.11) (2024-07-13)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([adf32ee](https://github.com/adobe/helix-cli/commit/adf32ee66f509495b5e775ddaa28db8ac9aa419b))
+
+## [16.5.10](https://github.com/adobe/helix-cli/compare/v16.5.9...v16.5.10) (2024-07-06)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.6.3 ([4644b4b](https://github.com/adobe/helix-cli/commit/4644b4b661f6788967c3152efaa7a9a67bfde186))
+
+## [16.5.9](https://github.com/adobe/helix-cli/compare/v16.5.8...v16.5.9) (2024-07-06)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([e1558c5](https://github.com/adobe/helix-cli/commit/e1558c599ac9fc52d59ba10fe4ae04445a793d5d))
+
+## [16.5.8](https://github.com/adobe/helix-cli/compare/v16.5.7...v16.5.8) (2024-07-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.6.2 ([c54b89a](https://github.com/adobe/helix-cli/commit/c54b89a523bbc7001c39f79913f501f87ae80b9e))
+
+## [16.5.7](https://github.com/adobe/helix-cli/compare/v16.5.6...v16.5.7) (2024-06-29)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v10.6.1 ([29bb88e](https://github.com/adobe/helix-cli/commit/29bb88eb290db2526ae52d8a0d8aac51dc229d53))
+
+## [16.5.6](https://github.com/adobe/helix-cli/compare/v16.5.5...v16.5.6) (2024-06-29)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([76eac9f](https://github.com/adobe/helix-cli/commit/76eac9f1f9c4be80568e51246b486141cda9a3b3))
+
+## [16.5.5](https://github.com/adobe/helix-cli/compare/v16.5.4...v16.5.5) (2024-06-24)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([#2387](https://github.com/adobe/helix-cli/issues/2387)) ([1e7f9cc](https://github.com/adobe/helix-cli/commit/1e7f9cc6f817a9ddf487c58bdcab9dc3ea972fc3))
+
+## [16.5.4](https://github.com/adobe/helix-cli/compare/v16.5.3...v16.5.4) (2024-06-22)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-indexer to v2.0.28 ([3d4308c](https://github.com/adobe/helix-cli/commit/3d4308cd60f84d7964fbcd645d4fdb29520c9498))
+
+## [16.5.3](https://github.com/adobe/helix-cli/compare/v16.5.2...v16.5.3) (2024-06-21)
+
+
+### Bug Fixes
+
+* support importing pages with authentication in importer ([aac442d](https://github.com/adobe/helix-cli/commit/aac442d4759a783695b21d41fbc0613177ca8d2d))
+
 ## [16.5.2](https://github.com/adobe/helix-cli/compare/v16.5.1...v16.5.2) (2024-06-17)
 
 
