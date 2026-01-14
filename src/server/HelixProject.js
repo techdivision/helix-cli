@@ -9,8 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { resolve } from 'path';
+import path, { resolve } from 'path';
 import { lstat } from 'fs/promises';
+import { IgnoreConfig } from '@adobe/helix-shared-config';
 import { HelixServer } from './HelixServer.js';
 import { BaseProject } from './BaseProject.js';
 import HeadHtmlSupport from './HeadHtmlSupport.js';
@@ -25,10 +26,37 @@ export class HelixProject extends BaseProject {
     this._printIndex = false;
     this._allowInsecure = false;
     this._file404html = null;
+    this._hlxIgnore = null;
   }
 
   withLiveReload(value) {
     this._server.withLiveReload(value);
+    return this;
+  }
+
+  withForwardBrowserLogs(value) {
+    this._server.withForwardBrowserLogs(value);
+    return this;
+  }
+
+  withSiteToken(value) {
+    this.siteToken = value;
+    this._server.withSiteToken(value);
+    return this;
+  }
+
+  withSite(site) {
+    this._site = site;
+    return this;
+  }
+
+  withOrg(org) {
+    this._org = org;
+    return this;
+  }
+
+  withSiteLoginUrl(value) {
+    this._siteLoginUrl = value;
     return this;
   }
 
@@ -44,6 +72,27 @@ export class HelixProject extends BaseProject {
 
   withAllowInsecure(value) {
     this._allowInsecure = value;
+    return this;
+  }
+
+  withCookies(value) {
+    this._server.withCookies(value);
+    return this;
+  }
+
+  withHtmlFolder(value) {
+    if (value) {
+      // Security: reject any paths with traversal patterns or absolute paths
+      if (path.isAbsolute(value) || value.includes('..') || value.startsWith('/')) {
+        throw new Error(`Invalid HTML folder name: ${value} only folders within the current workspace are allowed`);
+      }
+
+      this._htmlFolder = value;
+      this._server.withHtmlFolder(value);
+    } else {
+      this._htmlFolder = value;
+      this._server.withHtmlFolder(value);
+    }
     return this;
   }
 
@@ -64,6 +113,18 @@ export class HelixProject extends BaseProject {
     return this._server._liveReload;
   }
 
+  get org() {
+    return this._org;
+  }
+
+  get site() {
+    return this._site;
+  }
+
+  get siteLoginUrl() {
+    return this._siteLoginUrl;
+  }
+
   get file404html() {
     return this._file404html;
   }
@@ -72,12 +133,32 @@ export class HelixProject extends BaseProject {
     return this._headHtml;
   }
 
+  get htmlFolder() {
+    return this._htmlFolder;
+  }
+
+  get hlxIgnore() {
+    return this._hlxIgnore;
+  }
+
   async init() {
     await super.init();
     this._indexer = new Indexer()
       .withLogger(this._logger)
       .withCwd(this._cwd)
       .withPrintIndex(this._printIndex);
+
+    // Initialize IgnoreConfig for .hlxignore support
+    this._hlxIgnore = new IgnoreConfig()
+      .withDirectory(this._cwd);
+
+    try {
+      await this._hlxIgnore.init();
+    } catch (e) {
+      // .hlxignore file doesn't exist or couldn't be loaded, which is fine
+      this._hlxIgnore = null;
+    }
+
     return this;
   }
 
@@ -88,6 +169,7 @@ export class HelixProject extends BaseProject {
         log: this.log,
         proxyUrl: this.proxyUrl,
         allowInsecure: this.allowInsecure,
+        siteToken: this.siteToken,
       });
 
       // register local head in live-reload
@@ -117,11 +199,55 @@ export class HelixProject extends BaseProject {
     }
   }
 
+  async initHtmlFolder() {
+    if (this._htmlFolder && this.liveReload) {
+      const htmlFolderPath = resolve(this.directory, this._htmlFolder);
+      try {
+        await lstat(htmlFolderPath);
+        this.log.debug(`Registered HTML folder for live-reload: ${this._htmlFolder}`);
+        // Watch all HTML files in the folder - only .html extension
+        this.liveReload.registerFiles([`${htmlFolderPath}/**/*.html`], `/${this._htmlFolder}/`);
+      } catch (e) {
+        this.log.error(`HTML folder '${this._htmlFolder}' does not exist`);
+        throw new Error(`HTML folder '${this._htmlFolder}' does not exist`);
+      }
+    }
+  }
+
+  async initHlxIgnore() {
+    if (this._hlxIgnore && this.liveReload) {
+      const hlxIgnorePath = resolve(this.directory, '.hlxignore');
+      try {
+        await lstat(hlxIgnorePath);
+        this.log.debug('detected .hlxignore file');
+        if (this.liveReload) {
+          this.liveReload.registerFiles([hlxIgnorePath], '/');
+          this.liveReload.on('modified', async (modified) => {
+            if (modified.includes('.hlxignore')) {
+              this.log.debug('Reloading .hlxignore file');
+              // Re-initialize the IgnoreConfig to reload the file
+              try {
+                await this._hlxIgnore.init();
+              } catch (e) {
+                // If reload fails, just continue without ignore support
+                this._hlxIgnore = null;
+              }
+            }
+          });
+        }
+      } catch (e) {
+        // .hlxignore doesn't exist, which is fine
+      }
+    }
+  }
+
   async start() {
     this.log.debug('Launching AEM dev server...');
     await super.start();
     await this.initHeadHtml();
     await this.init404Html();
+    await this.initHtmlFolder();
+    await this.initHlxIgnore();
     if (this._indexer) {
       await this._indexer.init();
     }

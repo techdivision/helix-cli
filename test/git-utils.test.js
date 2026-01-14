@@ -15,8 +15,7 @@ import path from 'path';
 import net from 'net';
 import fse from 'fs-extra';
 import shell from 'shelljs';
-import { condit } from '@adobe/helix-testutils';
-import { createTestRoot } from './utils.js';
+import { createTestRoot, condit } from './utils.js';
 import GitUtils from '../src/git-utils.js';
 
 const GIT_USER_HOME = path.resolve(__rootdir, 'test', 'fixtures', 'gitutils');
@@ -70,8 +69,12 @@ describe('Testing GitUtils', () => {
   it('getBranch #unit', async () => {
     shell.exec('git checkout -b newbranch');
     assert.equal(await GitUtils.getBranch(testRoot), 'newbranch');
+    // Tags with dots are invalid for DNS, so they should not be returned
     shell.exec('git tag v0.0.0');
-    assert.equal(await GitUtils.getBranch(testRoot), 'v0.0.0');
+    assert.equal(await GitUtils.getBranch(testRoot), 'newbranch');
+    // Tags without dots are valid for DNS and should be returned
+    shell.exec('git tag v1-0-0');
+    assert.equal(await GitUtils.getBranch(testRoot), 'v1-0-0');
   });
 
   it('getBranch #unit (detached)', async () => {
@@ -177,6 +180,164 @@ describe('Testing GitUtils', () => {
     const anotherTestRoot = await createTestRoot();
     await fse.writeFile(path.resolve(anotherTestRoot, '.env'), 'Hello, world.\n', 'utf-8');
     assert.ok(await GitUtils.isIgnored(anotherTestRoot, '.env', GIT_USER_HOME));
+  });
+
+  describe('Git Worktree Support', () => {
+    it('isGitWorktree returns false for regular repo', async () => {
+      assert.equal(await GitUtils.isGitWorktree(testRoot), false);
+    });
+
+    it('isGitWorktree returns true for worktree', async () => {
+      // Create a .git file that simulates a worktree
+      await fse.remove(path.join(testRoot, '.git'));
+      await fse.writeFile(path.join(testRoot, '.git'), 'gitdir: /path/to/.git/worktrees/feature-branch');
+      assert.equal(await GitUtils.isGitWorktree(testRoot), true);
+    });
+
+    it('isGitSubmodule returns false for regular repo', async () => {
+      assert.equal(await GitUtils.isGitSubmodule(testRoot), false);
+    });
+
+    it('isGitSubmodule returns true for submodule', async () => {
+      // Create a .git file that simulates a submodule
+      await fse.remove(path.join(testRoot, '.git'));
+      await fse.writeFile(path.join(testRoot, '.git'), 'gitdir: ../.git/modules/my-module');
+      assert.equal(await GitUtils.isGitSubmodule(testRoot), true);
+    });
+
+    it('isGitSubmodule returns true for Windows-style submodule path', async () => {
+      // Create a .git file that simulates a submodule with Windows path
+      await fse.remove(path.join(testRoot, '.git'));
+      await fse.writeFile(path.join(testRoot, '.git'), 'gitdir: ..\\.git\\modules\\my-module');
+      assert.equal(await GitUtils.isGitSubmodule(testRoot), true);
+    });
+
+    it('getGitDirectory returns .git for regular repo', async () => {
+      const gitDir = await GitUtils.getGitDirectory(testRoot);
+      assert.equal(gitDir, path.resolve(testRoot, '.git'));
+    });
+
+    it('getGitDirectory resolves worktree path', async () => {
+      // Create a .git file that simulates a worktree
+      await fse.remove(path.join(testRoot, '.git'));
+      await fse.writeFile(path.join(testRoot, '.git'), 'gitdir: /absolute/path/.git/worktrees/feature');
+      const gitDir = await GitUtils.getGitDirectory(testRoot);
+      assert.equal(gitDir, '/absolute/path/.git/worktrees/feature');
+    });
+
+    it('getGitDirectory resolves relative submodule path', async () => {
+      // Create a .git file that simulates a submodule
+      await fse.remove(path.join(testRoot, '.git'));
+      await fse.writeFile(path.join(testRoot, '.git'), 'gitdir: ../.git/modules/my-module');
+      const gitDir = await GitUtils.getGitDirectory(testRoot);
+      assert.equal(gitDir, path.resolve(testRoot, '../.git/modules/my-module'));
+    });
+
+    it('isGitWorktree detects actual git worktree created by git CLI', async () => {
+      // Create actual worktree using git worktree command with unique name
+      const worktreeName = `test-worktree-${Date.now()}`;
+      const worktreeDir = path.join(path.dirname(testRoot), worktreeName);
+      shell.cd(testRoot);
+
+      try {
+        shell.exec(`git worktree add "${worktreeDir}" -b ${worktreeName}-branch`);
+
+        // Test detection
+        assert.equal(await GitUtils.isGitWorktree(worktreeDir), true);
+        assert.equal(await GitUtils.isGitSubmodule(worktreeDir), false);
+      } finally {
+        // Cleanup - ensure it runs even if test fails
+        shell.cd(testRoot);
+        shell.exec(`git worktree remove "${worktreeDir}" --force || true`);
+        await fse.remove(worktreeDir).catch(() => {});
+      }
+    });
+
+    it('isGitSubmodule detects actual git submodule created by git CLI', async () => {
+      // Create a separate repo to use as submodule with unique name
+      const submoduleName = `submodule-repo-${Date.now()}`;
+      const submoduleRepoDir = path.join(path.dirname(testRoot), submoduleName);
+
+      try {
+        await fse.ensureDir(submoduleRepoDir);
+        await fse.writeFile(path.join(submoduleRepoDir, 'README.md'), '# Submodule\n');
+
+        shell.cd(submoduleRepoDir);
+        shell.exec('git init');
+        shell.exec('git add README.md');
+        shell.exec('git commit -m "Initial commit"');
+
+        // Add submodule to main repo
+        shell.cd(testRoot);
+        // Use -c flag to allow file protocol just for this command
+        shell.exec(`git -c protocol.file.allow=always submodule add "file://${submoduleRepoDir}" test-submodule`);
+
+        const submoduleDir = path.join(testRoot, 'test-submodule');
+
+        // Test detection
+        assert.equal(await GitUtils.isGitSubmodule(submoduleDir), true);
+        assert.equal(await GitUtils.isGitWorktree(submoduleDir), false);
+      } finally {
+        // Cleanup - ensure it runs even if test fails
+        await fse.remove(submoduleRepoDir).catch(() => {});
+      }
+    });
+
+    it('isValidDNSName validates DNS-compatible names', () => {
+      // Valid DNS names (alphanumeric and hyphens, proper format)
+      assert.equal(GitUtils.isValidDNSName('main'), true);
+      assert.equal(GitUtils.isValidDNSName('feature-branch'), true);
+      assert.equal(GitUtils.isValidDNSName('v1-0-0'), true);
+      assert.equal(GitUtils.isValidDNSName('release-2024'), true);
+      assert.equal(GitUtils.isValidDNSName('a'), true); // single character is valid
+      assert.equal(GitUtils.isValidDNSName('1'), true); // single digit is valid
+
+      // Invalid DNS names (containing dots or other special chars)
+      assert.equal(GitUtils.isValidDNSName('v1.0.0'), false);
+      assert.equal(GitUtils.isValidDNSName('feature/branch'), false);
+      assert.equal(GitUtils.isValidDNSName('branch_name'), false);
+      assert.equal(GitUtils.isValidDNSName('branch@name'), false);
+      assert.equal(GitUtils.isValidDNSName('1.2.3'), false);
+
+      // Invalid DNS names (hyphens at start or end)
+      assert.equal(GitUtils.isValidDNSName('-branch'), false);
+      assert.equal(GitUtils.isValidDNSName('branch-'), false);
+      assert.equal(GitUtils.isValidDNSName('-'), false);
+
+      // Invalid DNS names (length issues)
+      assert.equal(GitUtils.isValidDNSName(''), false); // empty string
+      assert.equal(GitUtils.isValidDNSName(null), false); // null
+      assert.equal(GitUtils.isValidDNSName(undefined), false); // undefined
+      // 64 characters (too long)
+      assert.equal(GitUtils.isValidDNSName('a'.repeat(64)), false);
+      // 63 characters (max valid length)
+      assert.equal(GitUtils.isValidDNSName('a'.repeat(63)), true);
+    });
+
+    it('hashBranchToPort generates consistent ports', () => {
+      const port1 = GitUtils.hashBranchToPort('feature-branch');
+      const port2 = GitUtils.hashBranchToPort('feature-branch');
+      assert.equal(port1, port2);
+    });
+
+    it('hashBranchToPort stays within range', () => {
+      const branches = ['main', 'develop', 'feature/long-name-with-many-chars', 'fix/issue-123'];
+      branches.forEach((branch) => {
+        const port = GitUtils.hashBranchToPort(branch);
+        assert(port >= 3000 && port < 4000, `Port ${port} for branch ${branch} is out of range`);
+      });
+    });
+
+    it('hashBranchToPort generates different ports for different branches', () => {
+      const port1 = GitUtils.hashBranchToPort('feature-a');
+      const port2 = GitUtils.hashBranchToPort('feature-b');
+      assert.notEqual(port1, port2);
+    });
+
+    it('hashBranchToPort respects custom base and range', () => {
+      const port = GitUtils.hashBranchToPort('test-branch', 5000, 500);
+      assert(port >= 5000 && port < 5500, `Port ${port} is out of custom range`);
+    });
   });
 });
 

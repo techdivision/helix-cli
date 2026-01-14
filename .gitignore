@@ -1,4 +1,5 @@
 coverage
+coverage-browser
 .nyc_output/
 node_modules/
 pipeline.log
@@ -8,3 +9,4 @@ logs
 .DS_Store
 test-results.xml
 .idea/
+.hlx

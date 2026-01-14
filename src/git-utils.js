@@ -23,6 +23,8 @@ import git from 'isomorphic-git';
 const cache = {};
 
 export default class GitUtils {
+  static DEFAULT_BRANCH = 'main';
+
   /**
    * Determines whether the working tree directory contains uncommitted or unstaged changes.
    *
@@ -134,6 +136,28 @@ export default class GitUtils {
   }
 
   /**
+   * Checks if a name is valid for use in a DNS subdomain.
+   * DNS labels must:
+   * - Be between 1 and 63 characters long
+   * - Contain only alphanumeric characters and hyphens
+   * - Not start or end with a hyphen
+   * - Not contain dots or other special characters
+   * @param {string} name the name to validate
+   * @returns {boolean} true if valid for DNS
+   */
+  static isValidDNSName(name) {
+    // Check length (DNS labels must be 1-63 characters)
+    if (!name || name.length > 63) {
+      return false;
+    }
+
+    // DNS labels can only contain alphanumeric characters and hyphens
+    // They cannot start or end with hyphens
+    // They cannot contain dots or other special characters
+    return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(name);
+  }
+
+  /**
    * Returns the name of the current branch. If `HEAD` is at a tag, the name of the tag
    * will be returned instead, if head is at a commit, fallback will be returned.
    *
@@ -141,7 +165,25 @@ export default class GitUtils {
    * @param {string} fallback fallback value if no branch or tag is found
    * @returns {Promise<string>} current branch or tag
    */
-  static async getBranch(dir, fallback = 'main') {
+  static async getBranch(dir, fallback = this.DEFAULT_BRANCH) {
+    // For worktrees, we need to get the actual git directory
+    const gitDir = await this.getGitDirectory(dir);
+
+    // If it's a worktree, try to get the branch from the worktree HEAD file
+    if (await this.isGitWorktree(dir)) {
+      try {
+        // Read the HEAD file in the worktree's git directory
+        const headPath = path.join(gitDir, 'HEAD');
+        const headContent = await fse.readFile(headPath, 'utf-8');
+        const match = headContent.match(/^ref: refs\/heads\/(.+)$/m);
+        if (match) {
+          return match[1].trim();
+        }
+      } catch (e) {
+        // Fall through to regular processing
+      }
+    }
+
     // current commit sha
     const rev = await git.resolveRef({ fs, dir, ref: 'HEAD' });
     // reverse-lookup tag from commit sha
@@ -158,7 +200,11 @@ export default class GitUtils {
         ? await git.resolveRef({ fs, dir, ref: obj.object.object }) // annotated tag
         : oid; // lightweight tag
       if (commitSha === rev) {
-        return tag;
+        // Only return tags that are valid for DNS names
+        // Skip tags containing dots or other invalid characters
+        if (GitUtils.isValidDNSName(tag)) {
+          return tag;
+        }
       }
     }
 
@@ -192,7 +238,20 @@ export default class GitUtils {
    */
   static async getOrigin(dir) {
     try {
-      const rmt = (await git.listRemotes({ fs, dir })).find((entry) => entry.remote === 'origin');
+      // For worktrees, we need to use the main repository's config
+      let gitDir = dir;
+      if (await this.isGitWorktree(dir)) {
+        // Get the worktree's git directory
+        const worktreeGitDir = await this.getGitDirectory(dir);
+        // Extract the main repository path from the worktree git dir
+        // Worktree git dirs are like: /path/to/repo/.git/worktrees/worktree-name
+        const match = worktreeGitDir.match(/^(.+?)\/\.git\/worktrees\//);
+        if (match) {
+          [, gitDir] = match;
+        }
+      }
+
+      const rmt = (await git.listRemotes({ fs, dir: gitDir })).find((entry) => entry.remote === 'origin');
       return typeof rmt === 'object' ? rmt.url : '';
     } catch (e) {
       // don't fail if directory is not a git repository
@@ -261,5 +320,97 @@ export default class GitUtils {
         fs, dir, oid, filepath: pathName, format: 'content', cache,
       }))
       .then((obj) => obj.object);
+  }
+
+  /**
+   * Checks if the given directory is a git worktree.
+   *
+   * @param {string} dir working tree directory path
+   * @returns {Promise<boolean>} `true` if the directory is a git worktree
+   */
+  static async isGitWorktree(dir) {
+    const gitPath = path.resolve(dir, '.git');
+    try {
+      // Read the file directly - if it's not a file, readFile will throw
+      const content = await fse.readFile(gitPath, 'utf-8');
+      return content.includes('/worktrees/');
+    } catch (e) {
+      // Either doesn't exist, is a directory, or can't be read
+      // ignore
+    }
+    return false;
+  }
+
+  /**
+   * Checks if the given directory is a git submodule.
+   *
+   * @param {string} dir working tree directory path
+   * @returns {Promise<boolean>} `true` if the directory is a git submodule
+   */
+  static async isGitSubmodule(dir) {
+    const gitPath = path.resolve(dir, '.git');
+    try {
+      // Read the file directly - if it's not a file, readFile will throw
+      const content = await fse.readFile(gitPath, 'utf-8');
+      // Submodules have relative paths to .git/modules
+      return content.includes('/.git/modules/') || content.includes('\\.git\\modules\\');
+    } catch (e) {
+      // Either doesn't exist, is a directory, or can't be read
+      // ignore
+    }
+    return false;
+  }
+
+  /**
+   * Gets the actual git directory, resolving through worktree/submodule redirection.
+   *
+   * @param {string} dir working tree directory path
+   * @returns {Promise<string>} path to the actual git directory
+   */
+  static async getGitDirectory(dir) {
+    const gitPath = path.resolve(dir, '.git');
+    try {
+      // Try to read as a file first (worktree/submodule case)
+      const content = await fse.readFile(gitPath, 'utf-8');
+      const match = content.match(/^gitdir: (.+)$/m);
+      if (match) {
+        const targetPath = match[1].trim();
+        // If it's a relative path, resolve it relative to the directory
+        if (!path.isAbsolute(targetPath)) {
+          return path.resolve(dir, targetPath);
+        }
+        return targetPath;
+      }
+    } catch (e) {
+      // If readFile fails, it's likely a directory - check if it exists
+      try {
+        const stat = await fse.lstat(gitPath);
+        if (stat.isDirectory()) {
+          return gitPath;
+        }
+      } catch (statErr) {
+        // ignore
+      }
+    }
+    return gitPath;
+  }
+
+  /**
+   * Generates a deterministic port number based on branch name.
+   *
+   * @param {string} branchName the branch name to hash
+   * @param {number} basePort base port number (default: 3000)
+   * @param {number} range range of ports to use (default: 1000)
+   * @returns {number} port number between basePort and basePort + range - 1
+   */
+  static hashBranchToPort(branchName, basePort = 3000, range = 1000) {
+    let hash = 0;
+    for (let i = 0; i < branchName.length; i += 1) {
+      // eslint-disable-next-line no-bitwise
+      hash = ((hash << 5) - hash) + branchName.charCodeAt(i);
+      // eslint-disable-next-line no-bitwise
+      hash &= hash; // Convert to 32bit integer
+    }
+    return basePort + (Math.abs(hash) % range);
   }
 }

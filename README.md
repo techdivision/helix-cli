@@ -17,6 +17,8 @@ Install `aem` as a global command. You need Node 12.11 or newer.
 npm install -g @adobe/aem-cli
 ```
 
+If this fails with `File exists: /opt/homebrew/bin/hlx`, please [see here](#npm-install-fails-with-file-exists-opthomebrewbinhlx).
+
 ## Quick Start
 
 ```
@@ -25,6 +27,7 @@ Usage: aem <command> [options]
 
 Commands:
   aem up  Run a AEM development server
+  aem import  Run the AEM import server
 
 Options:
   --version                Show version number                         [boolean]
@@ -53,6 +56,44 @@ $ aem up
 The `--open` argument takes a path, eg `--open=/products/`, will cause the browser to be openend
 at the specific location. Disable with `--no-open'.`
 
+### browser console log forwarding
+
+The `--forward-browser-logs` flag enables forwarding of browser console messages (log, error, warn, info) to the terminal. This is particularly useful for debugging client-side issues without having to open the browser's developer tools.
+
+```
+$ aem up --forward-browser-logs
+```
+
+When enabled, browser console messages will appear in your terminal with the following format:
+```
+[Browser:error] 2025-07-27T10:30:45.123Z http://localhost:3000/script.js:42 Error message here
+```
+
+This feature is especially helpful when:
+- Debugging JavaScript errors in a headless environment
+- Monitoring client-side behavior during development
+- Working with AI coding assistants that need visibility into both server and client logs
+
+### html folder for content preview
+
+The `--html-folder` option enables serving HTML files without extensions, useful for previewing content changes when you don't have access to the authoring system.
+
+```
+$ aem up --html-folder content
+```
+
+This enables two features:
+
+1. **Extension-less URLs**: Access `/content/page` to serve `content/page.html`
+2. **Plain HTML with metadata**: Create `content/page.plain.html` files that are automatically wrapped with proper HTML structure and metadata processing
+
+#### Plain HTML files (.plain.html)
+
+Plain HTML files contain only the main content and an optional metadata block. The CLI automatically:
+- Wraps content in `<html><head><body><header><main><footer>` structure
+- Merges in `head.html` content
+- The metadata block is removed from the rendered content and converted to meta tags in the `<head>`.
+
 ### setting up a self-signed cert for using https
 
 1. create the certificate
@@ -63,6 +104,12 @@ $ openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out server.c
 ```
 
 this will create 2 files: `server.crt` and `server.key`
+
+Alternatively, if your browser does not trust the certificate, you can use mkcert to generate a trusted certificate:
+```bash
+# Install mkcert via Homebrew or your preferred method, then run:
+mkcert -cert-file server.crt -key-file server.key localhost 127.0.0.1
+```
 
 2. start aem with tls support
 
@@ -133,10 +180,23 @@ If present, `ALL_PROXY` is used as fallback if there is no other match.
 | `--addr`          | `AEM_ADDR`          | `127.0.0.1` | Development server bind address                             |
 | `--livereload`    | `AEM_LIVERELOAD`    | `true`      | Enable automatic reloading of modified sources in browser.  |
 | `--no-livereload` | `AEM_NO_LIVERELOAD` | `false`     | Disable live-reload.                                        |
+| `--forward-browser-logs` | `AEM_FORWARD_BROWSER_LOGS` | `false` | Forward browser console logs to terminal.            |
+| `--html-folder`   | `AEM_HTML_FOLDER`   | undefined   | Serve HTML files from folder without extensions. Supports .html and .plain.html files. |
 | `--open`          | `AEM_OPEN`          | `/`         | Open a browser window at specified path after server start. |
 | `--no-open`       | `AEM_NO_OPEN`       | `false`     | Disable automatic opening of browser window.                |
 | `--tls-key`       | `AEM_TLS_KEY`       | undefined   | Path to .key file (for enabling TLS)                        |
 | `--tls-cert`      | `AEM_TLS_CERT`      | undefined   | Path to .pem file (for enabling TLS)                        |
+
+## Starting an import
+
+The AEM Importer is an application that supports importing content to AEM.
+
+```
+$ cd <my-cool-project>
+$ aem import
+```
+
+Read the full AEM Importer [documentation](https://github.com/adobe/helix-importer-ui).
 
 # Developing AEM CLI
 
@@ -144,6 +204,22 @@ If present, `ALL_PROXY` is used as fallback if there is no other match.
 
 You can use `npm run check` to run the tests and check whether your code adheres
 to the aem-cli coding style.
+
+### Browser Injectables
+
+Browser-injected scripts (LiveReload and console log forwarding) are maintained in a separate sub-project at `packages/browser-injectables/`. This isolation keeps browser testing dependencies separate from the main CLI.
+
+#### Development
+- Injectable scripts are in `packages/browser-injectables/src/`
+- No build step required - scripts are used directly
+- Browser tests run only when injectable code changes
+
+#### Testing Browser Injectables
+```bash
+cd packages/browser-injectables
+npm install
+npm test
+```
 
 # Troubleshooting
 
@@ -157,6 +233,8 @@ These proxies use a private certificate authority (CA) to sign the certificates 
 servers they intercept. To make Node.js trust the server certificate, you need to add
 the CA certificate to the list of trusted CAs.
 
+### Option 1: Using IT-provided CA certificate
+
 The CA certificate is typically provided by your IT department. You can ask them for
 the CA certificate and save it to a file, e.g. `my-ca.crt`.
 
@@ -168,4 +246,48 @@ export NODE_EXTRA_CA_CERTS=my-ca.crt
 aem up
 ```
 
-This will make Node.js trust the server certificate and `aem up` should work.
+### Option 2: Extracting certificate from browser
+
+If you don't have access to the CA certificate from your IT department, you can extract it directly
+from your browser:
+
+1. Access the AEM admin URL in your browser (e.g., `https://admin.hlx.page/sidekick/owner-name/repo-name/github-branch-name/config.json`)
+2. Click on the padlock icon in the address bar and view the certificate details
+3. Export the certificate chain as a Base64 encoded `.pem` file
+4. Save it to a directory (e.g., `certs/hlx.page.pem`)
+5. Set the environment variable and run aem:
+
+```bash
+export NODE_EXTRA_CA_CERTS=./certs/hlx.page.pem
+aem up
+```
+
+On Windows, use `set` instead of `export`:
+```cmd
+set NODE_EXTRA_CA_CERTS=./certs/hlx.page.pem
+aem up
+```
+
+Either approach will make Node.js trust the server certificate and `aem up` should work.
+
+## `npm install` fails with `File exists: /opt/homebrew/bin/hlx`
+
+If you try to install `@adobe/aem-cli`: 
+
+```
+> npm install -g @adobe/aem-cli
+...
+npm error EEXIST: file already exists
+npm error File exists: /opt/homebrew/bin/hlx
+npm error Remove the existing file and try again, or run npm
+```
+
+This can happen when you previously had installed this tool under its old package name [@adobe/helix-cli](https://www.npmjs.com/package/@adobe/helix-cli). Starting with version 15.0.0, this tool was renamed `aem` and published as `@adobe/aem-cli`. The previous `@adobe/helix-cli` has been deprecated. However, the new package still provides the command line binary under the old name `hlx` in addition to `aem`, for backwards compatibility, which can lead to the npm install error.
+
+To solve, first uninstall the old version, then install again with the new name:
+
+```
+npm uninstall -g @adobe/helix-cli
+npm install -g @adobe/aem-cli
+```
+

@@ -5,47 +5,74 @@ env:
   CI_BUILD_NUM: ${{ github.run_id }}
   CI_BRANCH: ${{ github.ref_name }}
 
+permissions:
+  contents: write  # semantic-release-dry verifies the write permissions
+  issues: read # needed by semantic-release
+  pull-requests: write # needed by semantic-release
+  id-token: write # needed for npm trusted publishers with OIDC
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js 20.x
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v6
         with:
-          node-version: '20.x'
+          node-version: '24.x'
       - run: npm ci
+
+      # Sub-project setup and testing (conditional)
+      - name: Install browser injectable dependencies
+        if: hashFiles('packages/browser-injectables/**') != ''
+        run: cd packages/browser-injectables && npm ci
+
+      - name: Install Playwright dependencies for browser injectables
+        if: hashFiles('packages/browser-injectables/**') != ''
+        run: cd packages/browser-injectables && npx playwright install-deps
+
       - run: git config --global user.email "test@project-helix.io" && git config --global user.name "Test Build"
       - run: git config --global protocol.file.allow always
       - run: npm run lint
       - run: npm test
         env:
           CIRCLE_REPOSITORY_URL: dummy-url
-      - uses: codecov/codecov-action@v4
+
+      # Browser injectable tests (conditional)
+      - name: Test browser injectables
+        if: hashFiles('packages/browser-injectables/**') != ''
+        run: cd packages/browser-injectables && npm test
+
+      - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info,./packages/browser-injectables/coverage/lcov.info
+          flags: unittests,browsertests
       - name: Semantic Release (Dry Run)
+        if: github.actor != 'dependabot[bot]'
         run: npm run semantic-release-dry
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.ADOBE_BOT_NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK: ${{ secrets.HELIX_RELEASE_DISCORD_WEBHOOK }}
 
   test_win:
     name: Test (Windows)
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v4
-      - name: Use Node.js 20.x
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v6
         with:
-          node-version: '20.x'
+          node-version: '24.x'
       - run: npm ci
       - run: git config --global user.email "test@project-helix.io" && git config --global user.name "Test Build"
       - run: git config --global protocol.file.allow always
-      - run: npm run test-ci-win
+      - name: Run Windows Tests
+        run: npm run test-ci-win
+        timeout-minutes: 8
         env:
           CIRCLE_REPOSITORY_URL: dummy-url
 
@@ -55,16 +82,18 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [test, test_win]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Use Node.js 20.x
-        uses: actions/setup-node@v4
+      - name: Use Node.js 24.11 (LTS)
+        uses: actions/setup-node@v6
         with:
-          node-version: '20.x'
+          node-version: '24.12.0'
       - run: npm ci
+      - name: Check npm version
+        run: npm --version
       - run: npm run semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ADOBE_BOT_GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.ADOBE_BOT_NPM_TOKEN }}
           DISCORD_WEBHOOK: ${{ secrets.HELIX_RELEASE_DISCORD_WEBHOOK }}

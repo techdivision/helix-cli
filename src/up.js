@@ -11,6 +11,7 @@
  */
 import path from 'path';
 import { getOrCreateLogger } from './log-common.js';
+import { getSiteTokenFromFile } from './config/config-utils.js';
 
 export default function up() {
   let executor;
@@ -56,6 +57,11 @@ export default function up() {
           type: 'string',
           default: undefined,
         })
+        .option('site-token', {
+          alias: 'siteToken',
+          describe: 'Site token to be used by the cli to access the website',
+          type: 'string',
+        })
         .option('addr', {
           describe: 'Bind development server on addr. use * to bind to any address and allow external connections.',
           type: 'string',
@@ -96,12 +102,28 @@ export default function up() {
           describe: 'Path to local folder to cache the responses (note: this is an alpha feature, it may be removed without notice)',
           type: 'string',
         })
-        .group(['url', 'livereload', 'no-livereload', 'open', 'no-open', 'print-index', 'cache'], 'AEM Options')
+        .group(['url', 'livereload', 'no-livereload', 'open', 'no-open', 'print-index', 'cache', 'forward-browser-logs'], 'AEM Options')
         .option('allow-insecure', {
           alias: 'allowInsecure',
           describe: 'Whether to allow insecure requests to the server',
           type: 'boolean',
           default: false,
+        })
+        .option('cookies', {
+          describe: 'Proxy all cookies in requests. By default, only the hlx-auth-token cookie is proxied.',
+          type: 'boolean',
+          default: false,
+        })
+        .option('forward-browser-logs', {
+          alias: 'forwardBrowserLogs',
+          describe: 'Forward browser console logs to terminal',
+          type: 'boolean',
+          default: false,
+        })
+        .option('html-folder', {
+          alias: 'htmlFolder',
+          describe: 'Serve HTML files from this folder without extensions (e.g., /folder/file serves folder/file.html or folder/file.plain.html) use this to preview content changes if you do not have access to the authoring system',
+          type: 'string',
         })
 
         .help();
@@ -122,11 +144,15 @@ export default function up() {
         .withOpen(path.basename(argv.$0) === 'aem' ? argv.open : false)
         .withTLS(argv.tlsKey, argv.tlsCert)
         .withLiveReload(argv.livereload)
+        .withForwardBrowserLogs(argv.forwardBrowserLogs)
+        .withSiteToken(argv.siteToken || await getSiteTokenFromFile())
         .withUrl(argv.url)
         .withPrintIndex(argv.printIndex)
         .withAllowInsecure(argv.allowInsecure)
         .withKill(argv.stopOther)
         .withCache(argv.alphaCache)
+        .withCookies(argv.cookies)
+        .withHtmlFolder(argv.htmlFolder)
         .run();
     },
   };

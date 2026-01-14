@@ -17,8 +17,8 @@ import { HelixProject } from './server/HelixProject.js';
 import GitUtils from './git-utils.js';
 import MultisiteUtils from './multisite-utils.js';
 import pkgJson from './package.cjs';
-import { getFetch } from './fetch-utils.js';
 import { AbstractServerCommand } from './abstract-server.cmd.js';
+import { checkForUpdates } from './update-check.js';
 
 export default class UpCommand extends AbstractServerCommand {
   withLiveReload(value) {
@@ -26,8 +26,13 @@ export default class UpCommand extends AbstractServerCommand {
     return this;
   }
 
+  withForwardBrowserLogs(value) {
+    this._forwardBrowserLogs = value;
+    return this;
+  }
+
   withUrl(value) {
-    this._url = value;
+    this._originalUrl = value;
     return this;
   }
 
@@ -43,6 +48,22 @@ export default class UpCommand extends AbstractServerCommand {
 
   withSite(value) {
     this._site = value;
+    return this;
+  }
+
+  withSiteToken(value) {
+    this._siteToken = value;
+    return this;
+  }
+
+  withCookies(value) {
+    this._cookies = value;
+    return this;
+  }
+
+  withHtmlFolder(value) {
+    // Basic validation - detailed validation done in HelixProject
+    this._htmlFolder = value;
     return this;
   }
 
@@ -88,7 +109,15 @@ export default class UpCommand extends AbstractServerCommand {
     try {
       const stat = await fse.lstat(path.resolve(this.directory, '.git'));
       if (stat.isFile()) {
-        throw Error('git submodules are not supported.');
+        // Check if it's a submodule or a worktree
+        if (await GitUtils.isGitSubmodule(this.directory)) {
+          throw Error('git submodules are not supported.');
+        }
+        // Verify it's actually a worktree
+        if (!await GitUtils.isGitWorktree(this.directory)) {
+          throw Error('Unsupported git configuration: .git is a file but not a valid worktree or submodule.');
+        }
+        // It's a worktree - this is allowed
       }
     } catch (e) {
       if (e.code === 'ENOENT') {
@@ -97,14 +126,28 @@ export default class UpCommand extends AbstractServerCommand {
       throw e;
     }
 
+    // Check if we're in a worktree and need to adjust the port
+    const isWorktree = await GitUtils.isGitWorktree(this.directory);
+    if (isWorktree && this._httpPort === 3000) {
+      // Only adjust port if using default port
+      const branch = await GitUtils.getBranch(this.directory);
+      this._httpPort = GitUtils.hashBranchToPort(branch);
+      this.log.info(chalk`Git worktree detected. Using port {cyan ${this._httpPort}} for branch {cyan ${branch}}`);
+    }
+
     // init dev default file params
     this._project = new HelixProject()
       .withCwd(this.directory)
       .withLiveReload(this._liveReload)
+      .withForwardBrowserLogs(this._forwardBrowserLogs)
       .withLogger(this._logger)
       .withKill(this._kill)
       .withPrintIndex(this._printIndex)
-      .withAllowInsecure(this._allowInsecure);
+      .withAllowInsecure(this._allowInsecure)
+      .withSiteToken(this._siteToken)
+      .withCookies(this._cookies)
+      .withHtmlFolder(this._htmlFolder);
+
     this.log.info(chalk`{yellow     ___    ________  ___                          __      __ v${pkgJson.version}}`);
     this.log.info(chalk`{yellow    /   |  / ____/  |/  /  _____(_)___ ___  __  __/ /___ _/ /_____  _____}`);
     this.log.info(chalk`{yellow   / /| | / __/ / /|_/ /  / ___/ / __ \`__ \\/ / / / / __ \`/ __/ __ \\/ ___/}`);
@@ -112,20 +155,34 @@ export default class UpCommand extends AbstractServerCommand {
     this.log.info(chalk`{yellow /_/  |_/_____/_/  /_/  /____/_/_/ /_/ /_/\\__,_/_/\\__,_/\\__/\\____/_/}`);
     this.log.info('');
 
+    // Check for updates asynchronously (non-blocking)
+    checkForUpdates('@adobe/aem-cli', pkgJson.version, this.log).catch(() => {
+      // Silently ignore errors
+    });
+
     const ref = await GitUtils.getBranch(this.directory);
     this._gitUrl = await MultisiteUtils.getActiveSiteGitUrl(this.directory);
     if (!this._gitUrl) {
       throw Error('No git remote found. Make sure you have a remote "origin" configured.');
     }
-    if (!this._url) {
-      await this.verifyUrl(this._gitUrl, ref);
-    }
+    await this.initUrl(this._gitUrl, ref);
     this._project.withProxyUrl(this._url);
+    const { site, org } = this.extractSiteAndOrg(this._url);
+    if (site && org) {
+      this._project
+        .withSite(site)
+        .withOrg(org)
+        .withSiteLoginUrl(
+          // TODO switch to production URL
+          `https://admin.hlx.page/login/${org}/${site}/main?client_id=aem-cli&redirect_uri=${encodeURIComponent(`http://localhost:${this._httpPort}/.aem/cli/login/ack`)}&selectAccount=true`,
+        );
+    }
+
     await this.initServerOptions();
 
     try {
       await this._project.init();
-      this.watchGit();
+      await this.watchGit();
     } catch (e) {
       throw Error(`Unable to start AEM: ${e.message}`);
     }
@@ -135,68 +192,45 @@ export default class UpCommand extends AbstractServerCommand {
     });
   }
 
-  async verifyUrl(gitUrl, ref) {
-    // check if the site is on helix5
-    // https://admin.hlx.page/sidekick/adobe/www-aem-live/main/config.json
-    // {
-    //   "host": "aem.live",
-    //     "liveHost": "main--www-aem-live--adobe.aem.live",
-    //       "plugins": [
-    //         {
-    //           "id": "doc",
-    //           "title": "Documentation",
-    //           "url": "https://www.aem.live/docs/"
-    //         }
-    //       ],
-    //         "previewHost": "main--www-aem-live--adobe.aem.page",
-    //           "project": "Helix Website (AEM Live)",
-    //             "testProperty": "header";
-    // }
-    let previewHostBase = 'hlx.page';
-    const configUrl = `https://admin.hlx.page/sidekick/${gitUrl.owner}/${gitUrl.repo}/main/config.json`;
-    try {
-      const configResp = await getFetch(this._allowInsecure)(configUrl);
-      if (configResp.ok) {
-      // this is best effort for now
-        const config = await configResp.json();
-        const { previewHost } = config;
-        if (previewHost && previewHost.endsWith('.aem.page')) {
-          previewHostBase = 'aem.page';
-        }
-      }
-      /* c8 ignore start */
-      // this is notoriously hard to test, so we ignore it for now
-      // but if you want to give it a try, set up a local server with a self-signed cert
-      // change, /etc/hosts to point admin.hlx.page to localhost and run the test
-    } catch (e) {
-      if (e.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' || e.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-        await this.stop();
-        this.log.error(chalk`{yellow ${configUrl}} is using an invalid certificate, please check https://github.com/adobe/helix-cli#troubleshooting for help.`);
-        throw Error(e.message);
-      }
+  // eslint-disable-next-line class-methods-use-this
+  extractSiteAndOrg(url) {
+    const { hostname } = new URL(url);
+    const parts = hostname.split('.');
+    const errorResult = { site: null, org: null };
+    if (parts.length < 3) {
+      return errorResult;
     }
-    /* c8 ignore stop */
+    if (!['live', 'page'].includes(parts[2]) || !['hlx', 'aem'].includes(parts[1])) {
+      return errorResult;
+    }
+    const [, site, org] = parts[0].split('--');
+    return { site, org };
+  }
 
+  async initUrl(gitUrl, ref) {
     const dnsName = `${ref.replace(/\//g, '-')}--${gitUrl.repo}--${gitUrl.owner}`;
     // check length limit
     if (dnsName.length > 63) {
-      this.log.error(chalk`URL {yellow https://${dnsName}.${previewHostBase}} exceeds the 63 character limit for DNS labels.`);
+      this.log.error(chalk`URL {yellow https://${dnsName}.aem.page} exceeds the 63 character limit for DNS labels.`);
       this.log.error(chalk`Please use a shorter branch name or a shorter repository name.`);
       await this.stop();
       throw Error('branch name too long');
     }
 
-    // always proxy to main
-    this._url = `https://main--${gitUrl.repo}--${gitUrl.owner}.${previewHostBase}`;
+    const url = this._originalUrl || 'https://main--{{repo}}--{{owner}}.aem.page';
+    this._url = url.replace(/\{\{(owner|repo)\}\}/g, (_, key) => gitUrl[key]);
   }
 
   /**
    * Watches the git repository for changes and restarts the server if necessary.
    */
-  watchGit() {
+  async watchGit() {
     let timer = null;
 
-    this._watcher = chokidar.watch(path.resolve(this._project.directory, '.git'), {
+    // Resolve the actual git directory for worktrees
+    const gitDir = await GitUtils.getGitDirectory(this._project.directory);
+
+    this._watcher = chokidar.watch(gitDir, {
       persistent: true,
       ignoreInitial: true,
     });
@@ -220,7 +254,7 @@ export default class UpCommand extends AbstractServerCommand {
             if (gitUrl.toString() !== this._gitUrl.toString()) {
               this.log.info('git HEAD or remotes changed, reconfiguring server...');
               this._gitUrl = gitUrl;
-              await this.verifyUrl(gitUrl, ref);
+              await this.initUrl(gitUrl, ref);
               this._project.withProxyUrl(this._url);
               await this._project.initHeadHtml();
               this.log.info(`Updated proxy to ${this._url}`);

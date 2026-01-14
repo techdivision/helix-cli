@@ -9,14 +9,21 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import crypto from 'crypto';
+import express from 'express';
 import { promisify } from 'util';
 import path from 'path';
+import { lstat, readFile } from 'fs/promises';
 import compression from 'compression';
 import utils from './utils.js';
 import RequestContext from './RequestContext.js';
 import { asyncHandler, BaseServer } from './BaseServer.js';
 import LiveReload from './LiveReload.js';
+import { saveSiteTokenToFile } from '../config/config-utils.js';
 import MultisiteUtils from '../multisite-utils.js';
+
+const LOGIN_ROUTE = '/.aem/cli/login';
+const LOGIN_ACK_ROUTE = '/.aem/cli/login/ack';
 
 export class HelixServer extends BaseServer {
   /**
@@ -27,12 +34,281 @@ export class HelixServer extends BaseServer {
     super(project);
     this._liveReload = null;
     this._enableLiveReload = false;
+    this._forwardBrowserLogs = false;
     this._app.use(compression());
+    this._autoLogin = true;
+    this._cookies = false;
   }
 
   withLiveReload(value) {
     this._enableLiveReload = value;
     return this;
+  }
+
+  withForwardBrowserLogs(value) {
+    this._forwardBrowserLogs = value;
+    return this;
+  }
+
+  get forwardBrowserLogs() {
+    return this._forwardBrowserLogs;
+  }
+
+  withSiteToken(value) {
+    this._siteToken = value;
+    return this;
+  }
+
+  withCookies(value) {
+    this._cookies = value;
+    return this;
+  }
+
+  withHtmlFolder(value) {
+    // It's now sanitized in HelixProject.withHtmlFolder
+    this._htmlFolder = value;
+    return this;
+  }
+
+  async handleLogin(req, res) {
+    // disable autologin if login was called at least once
+    this._autoLogin = false;
+    // clear any previous login errors
+    delete this.loginError;
+
+    if (!this._project.siteLoginUrl) {
+      res.status(404).send('Login not supported. Could not extract site and org information.');
+      return;
+    }
+
+    this.log.info(`Starting login process for : ${this._project.org}/${this._project.site}. Redirecting...`);
+    this._loginState = crypto.randomUUID();
+    const loginUrl = `${this._project.siteLoginUrl}&state=${this._loginState}`;
+    res.status(302).set('location', loginUrl).send('');
+  }
+
+  async handleLoginAck(req, res) {
+    const CACHE_CONTROL = 'no-store, private, must-revalidate';
+    const CORS_HEADERS = {
+      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-headers': 'content-type',
+    };
+
+    const { origin } = req.headers;
+    if (['https://admin.hlx.page', 'https://admin-ci.hlx.page'].includes(origin)) {
+      CORS_HEADERS['access-control-allow-origin'] = origin;
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).set(CORS_HEADERS).send('');
+      return;
+    }
+
+    if (req.method === 'POST') {
+      const { state, siteToken } = req.body;
+      try {
+        if (!this._loginState || this._loginState !== state) {
+          this.loginError = { message: 'Login Failed: We received an invalid state.' };
+          this.log.warn('State mismatch. Discarding site token.');
+          res.status(400)
+            .set(CORS_HEADERS)
+            .set('cache-control', CACHE_CONTROL)
+            .send('Invalid state');
+          return;
+        }
+
+        if (!siteToken) {
+          this.loginError = { message: 'Login Failed: Missing site token.' };
+          res.status(400)
+            .set('cache-control', CACHE_CONTROL)
+            .set(CORS_HEADERS)
+            .send('Missing site token');
+          return;
+        }
+
+        this.withSiteToken(siteToken);
+        this._project.headHtml.setSiteToken(siteToken);
+        await saveSiteTokenToFile(siteToken);
+        this.log.info('Site token received and saved to file.');
+
+        res.status(200)
+          .set('cache-control', CACHE_CONTROL)
+          .set(CORS_HEADERS)
+          .send('Login successful.');
+        return;
+      } finally {
+        delete this._loginState;
+      }
+    }
+
+    if (this.loginError) {
+      res.status(400)
+        .set('cache-control', CACHE_CONTROL)
+        .send(this.loginError.message);
+      delete this.loginError;
+      return;
+    }
+
+    res.status(302)
+      .set('cache-control', CACHE_CONTROL)
+      .set('location', '/')
+      .send('');
+  }
+
+  /**
+   * Resolves which HTML file to serve from the HTML folder
+   * @param {string} relativePath path relative to HTML folder
+   * @returns {Promise<{file: string, isPlain: boolean}|null>} resolved file info or null
+   */
+  async resolveHtmlFolderFile(relativePath) {
+    // Security check: prevent path traversal with /../ anywhere in the path
+    if (relativePath.includes('/../')) {
+      return null;
+    }
+
+    // Don't process if it already has an extension
+    if (relativePath.includes('.')) {
+      return null;
+    }
+
+    // Try .html first
+    const htmlFile = path.resolve(
+      this._project.directory,
+      this._htmlFolder,
+      `${relativePath}.html`,
+    );
+
+    if (!utils.validatePathSecurity(htmlFile, this._project.directory)) {
+      return null;
+    }
+
+    try {
+      const stats = await lstat(htmlFile);
+      if (stats.isFile()) {
+        return { file: htmlFile, isPlain: false };
+      }
+    } catch (e) {
+      // .html not found, try .plain.html
+    }
+
+    // Try .plain.html
+    const plainHtmlFile = path.resolve(
+      this._project.directory,
+      this._htmlFolder,
+      `${relativePath}.plain.html`,
+    );
+
+    if (!utils.validatePathSecurity(plainHtmlFile, this._project.directory)) {
+      return null;
+    }
+
+    try {
+      const stats = await lstat(plainHtmlFile);
+      if (stats.isFile()) {
+        return { file: plainHtmlFile, isPlain: true };
+      }
+    } catch (e) {
+      // Neither exists
+    }
+
+    return null;
+  }
+
+  /**
+   * Transforms .plain.html content into complete HTML with head.html
+   * @param {string} plainHtmlFile path to .plain.html file
+   * @returns {Promise<string>} complete HTML document
+   */
+  async transformPlainHtml(plainHtmlFile) {
+    const plainContent = await readFile(plainHtmlFile, 'utf-8');
+
+    // Extract metadata and clean content
+    const { content, metadata } = utils.extractMetadataBlock(plainContent);
+
+    // Extract default metadata values from content
+    const defaults = utils.extractDefaultMetadata(content);
+
+    // Get head HTML using existing HeadHtmlSupport
+    await this._project.headHtml.update();
+    const headHtml = this._project.headHtml.localHtml || '';
+
+    // Generate meta tags from metadata with defaults
+    const metaTags = utils.generateMetaTags(metadata, defaults);
+
+    // Wrap in complete HTML structure
+    return utils.wrapPlainHtml(content, headHtml, metaTags);
+  }
+
+  /**
+   * HTML Folder handler - serves HTML files without extensions
+   * @param {Express.Request} req request
+   * @param {Express.Response} res response
+   * @param {Function} next next middleware
+   */
+  async handleHtmlFolderRequest(req, res, next) {
+    if (!this._htmlFolder) {
+      return next();
+    }
+
+    // Use Express's req.path for pathname extraction
+    const pathname = req.path;
+    const folderPrefix = `/${this._htmlFolder}/`;
+
+    // Check if the request is for the HTML folder
+    if (!pathname.startsWith(folderPrefix)) {
+      return next();
+    }
+
+    // Extract the path within the HTML folder
+    let relativePath = pathname.slice(folderPrefix.length);
+
+    // Handle directory requests (trailing slash) by appending 'index'
+    if (relativePath === '' || relativePath.endsWith('/')) {
+      relativePath = `${relativePath}index`.replace(/\/+/g, '/');
+    }
+
+    // Resolve which file to serve (.html or .plain.html)
+    const resolvedFile = await this.resolveHtmlFolderFile(relativePath);
+    if (!resolvedFile) {
+      return next();
+    }
+
+    const { log } = this;
+    const liveReload = this._liveReload;
+
+    // Register for live reload if enabled
+    if (liveReload) {
+      liveReload.startRequest(req.id, req.url);
+    }
+
+    // Load content (handle .plain.html transformation)
+    let htmlContent;
+    if (resolvedFile.isPlain) {
+      htmlContent = await this.transformPlainHtml(resolvedFile.file);
+    } else {
+      htmlContent = await readFile(resolvedFile.file, 'utf-8');
+    }
+
+    // Inject live reload script
+    if (liveReload) {
+      htmlContent = utils.injectLiveReloadScript(htmlContent, this);
+    }
+
+    // Send response
+    res.set({
+      'content-type': 'text/html; charset=utf-8',
+      'access-control-allow-origin': '*',
+    });
+    res.send(htmlContent);
+
+    // Register with live reload
+    if (liveReload) {
+      liveReload.registerFile(req.id, resolvedFile.file);
+      liveReload.endRequest(req.id);
+    }
+
+    log.debug(`served HTML file ${resolvedFile.file} for ${req.url}`);
+    return undefined;
   }
 
   /**
@@ -54,6 +330,16 @@ export class HelixServer extends BaseServer {
       return;
     }
 
+    // Check if the file is ignored by .hlxignore
+    if (this._project.hlxIgnore) {
+      // IgnoreConfig expects relative paths from project root
+      const relativePath = path.relative(this._project.directory, filePath);
+      const isIgnored = this._project.hlxIgnore.ignores(relativePath);
+      if (isIgnored) {
+        log.warn(`Warning: Proxying ignored file: ${ctx.path} (matched by .hlxignore)`);
+      }
+    }
+
     const liveReload = this._liveReload;
     if (liveReload) {
       liveReload.startRequest(ctx.requestId, ctx.path);
@@ -71,16 +357,32 @@ export class HelixServer extends BaseServer {
 
     // try to serve static
     try {
-      await sendFile(filePath, {
-        dotfiles: 'allow',
-        headers: {
+      // Check if it's an HTML file and live reload is enabled
+      if (liveReload && filePath.endsWith('.html')) {
+        // Read the HTML file and inject the livereload script
+        let htmlContent = await readFile(filePath, 'utf-8');
+        htmlContent = utils.injectLiveReloadScript(htmlContent, this);
+
+        res.set({
+          'content-type': 'text/html; charset=utf-8',
           'access-control-allow-origin': '*',
-        },
-      });
-      if (liveReload) {
+        });
+        res.send(htmlContent);
         liveReload.registerFile(ctx.requestId, filePath);
+        log.debug(`${pfx}served local HTML file with livereload: ${filePath}`);
+      } else {
+        // Serve other files normally
+        await sendFile(filePath, {
+          dotfiles: 'allow',
+          headers: {
+            'access-control-allow-origin': '*',
+          },
+        });
+        if (liveReload) {
+          liveReload.registerFile(ctx.requestId, filePath);
+        }
+        log.debug(`${pfx}served local file ${filePath}`);
       }
-      log.debug(`${pfx}served local file ${filePath}`);
       return;
     } catch (e) {
       log.debug(`${pfx}unable to deliver local file ${ctx.path} - ${e.stack || e}`);
@@ -93,18 +395,23 @@ export class HelixServer extends BaseServer {
       }
     }
 
-    // use proxy
     try {
+      // use proxy
       const url = new URL(ctx.url, proxyUrl);
       for (const [key, value] of proxyUrl.searchParams.entries()) {
         url.searchParams.append(key, value);
       }
+
       await utils.proxyRequest(ctx, url.href, req, res, {
         injectLiveReload: this._project.liveReload,
         headHtml: this._project.headHtml,
         indexer: this._project.indexer,
         cacheDirectory: this._project.cacheDirectory,
         file404html: this._project.file404html,
+        siteToken: this._siteToken,
+        loginPath: LOGIN_ROUTE,
+        autoLogin: this._autoLogin,
+        cookies: this._cookies,
       });
     } catch (err) {
       log.error(`${pfx}failed to proxy AEM request ${ctx.path}: ${err.message}`);
@@ -118,11 +425,26 @@ export class HelixServer extends BaseServer {
     await super.setupApp();
     if (this._enableLiveReload) {
       this._liveReload = new LiveReload(this.log);
+      this._liveReload.withForwardBrowserLogs(this._forwardBrowserLogs);
       await this._liveReload.init(this.app, this._server);
     }
+
+    this.app.get(LOGIN_ROUTE, asyncHandler(this.handleLogin.bind(this)));
+    this.app.get(LOGIN_ACK_ROUTE, asyncHandler(this.handleLoginAck.bind(this)));
+    this.app.post(LOGIN_ACK_ROUTE, express.json(), asyncHandler(this.handleLoginAck.bind(this)));
+    this.app.options(LOGIN_ACK_ROUTE, asyncHandler(this.handleLoginAck.bind(this)));
+
+    // Add HTML folder handler before the general proxy handler
+    if (this._htmlFolder) {
+      // Only handle GET requests for the HTML folder path
+      const htmlFolderPattern = new RegExp(`^/${this._htmlFolder}/.*`);
+      this.app.get(htmlFolderPattern, asyncHandler(this.handleHtmlFolderRequest.bind(this)));
+      this.log.info(`Serving HTML files from folder: ${this._htmlFolder}`);
+    }
+
     const handler = asyncHandler(this.handleProxyModeRequest.bind(this));
-    this.app.get('*', handler);
-    this.app.post('*', handler);
+    this.app.get(/.*/, handler);
+    this.app.post(/.*/, handler);
   }
 
   async doStop() {

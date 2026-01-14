@@ -63,6 +63,13 @@ export class BaseServer extends EventEmitter {
       res.send('Goodbye!');
       this.stop();
     });
+    this._app.get('/.hlx/version', async (req, res) => {
+      res.set('Content-Type', 'application/json');
+      res.json({
+        version: packageJson.version,
+        name: packageJson.name,
+      });
+    });
   }
 
   withPort(port) {
@@ -142,6 +149,7 @@ export class BaseServer extends EventEmitter {
       const listenCb = (err) => {
         if (err) {
           reject(new Error(`Error while starting ${this._scheme} server: ${err}`));
+          return;
         }
         this._port = this._server.address().port;
         this._addr = this._server.address().address;
