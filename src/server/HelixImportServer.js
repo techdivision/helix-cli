@@ -16,6 +16,7 @@ import { getFetch, resetContext } from '../fetch-utils.js';
 import utils from './utils.js';
 import RequestContext from './RequestContext.js';
 import { asyncHandler, BaseServer } from './BaseServer.js';
+import MultisiteUtils from '../multisite-utils.js';
 
 export class HelixImportServer extends BaseServer {
   /**
@@ -30,7 +31,7 @@ export class HelixImportServer extends BaseServer {
 
     // try to serve static
     try {
-      const filePath = path.join(this._project.directory, ctx.path);
+      const filePath = await MultisiteUtils.getMultiSiteFilePath(this._project.directory, ctx.path);
       if (path.relative(this._project.directory, filePath).startsWith('..')) {
         log.info(`refuse to serve file outside the project directory: ${filePath}`);
         res.status(403).send('');

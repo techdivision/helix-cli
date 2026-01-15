@@ -52,6 +52,11 @@ export default function up() {
           type: 'int',
           default: 3000,
         })
+        .option('site', {
+          describe: 'Start development server for site',
+          type: 'string',
+          default: undefined,
+        })
         .option('site-token', {
           alias: 'siteToken',
           describe: 'Site token to be used by the cli to access the website',
@@ -132,6 +137,7 @@ export default function up() {
 
       await executor
         .withHttpPort(argv.port)
+        .withSite(argv.site)
         .withBindAddr(argv.addr)
         // only open  browser window when executable is `aem`
         // this prevents the window to be opened during integration tests

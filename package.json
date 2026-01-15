@@ -77,6 +77,7 @@
     "semver": "7.7.3",
     "shelljs": "0.10.0",
     "unified": "11.0.5",
+    "yaml": "^2.4.1",
     "uuid": "13.0.0",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0"

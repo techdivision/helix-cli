@@ -19,6 +19,7 @@ import utils from './utils.js';
 import RequestContext from './RequestContext.js';
 import { asyncHandler, BaseServer } from './BaseServer.js';
 import LiveReload from './LiveReload.js';
+import MultisiteUtils from '../multisite-utils.js';
 import { saveSiteTokenToFile } from '../config/config-utils.js';
 
 const LOGIN_ROUTE = '/.aem/cli/login';
@@ -322,7 +323,7 @@ export class HelixServer extends BaseServer {
     const { log } = this;
     const proxyUrl = new URL(this._project.proxyUrl);
 
-    const filePath = path.join(this._project.directory, ctx.path);
+    const filePath = await MultisiteUtils.getMultiSiteFilePath(this._project.directory, ctx.path);
     if (path.relative(this._project.directory, filePath).startsWith('..')) {
       log.info(`refuse to serve file outside the project directory: ${filePath}`);
       res.status(403).send('');
